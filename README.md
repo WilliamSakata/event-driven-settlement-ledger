@@ -20,7 +20,3 @@ Node.js/TypeScript, PostgreSQL, Kafka, Docker Compose for the local environment.
 ## Kubernetes
 
 Helm chart with one Deployment per service, Kafka as a StatefulSet, one internal Service per service.
-
-## What it demonstrates
-
-Design of a real financial system, with the guarantees this domain requires — not a CRUD with a fancy name.
