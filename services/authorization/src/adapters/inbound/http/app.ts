@@ -1,16 +1,24 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
+import { RequestTransfer } from '../../../application/use-cases/RequestTransfer';
+import { TransferRepositoryPort } from '../../../application/ports/TransferRepositoryPort';
+import { createTransfersRouter } from './transfersRouter';
 
 export interface AppDependencies {
-  [key: string]: unknown;
+  requestTransfer?: RequestTransfer;
+  transferRepository?: TransferRepositoryPort;
 }
 
-export function createApp(_deps: AppDependencies): Express {
+export function createApp(deps: AppDependencies): Express {
   const app = express();
   app.use(express.json());
 
   app.get('/health', (_req: Request, res: Response) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  if (deps.requestTransfer && deps.transferRepository) {
+    app.use(createTransfersRouter(deps.requestTransfer, deps.transferRepository));
+  }
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof SyntaxError && 'status' in err && (err as { status?: number }).status === 400) {
