@@ -20,7 +20,7 @@
 - Every service's `app.ts` has a JSON body parser, a `GET /health` route, and a 4-argument Express error-handling middleware (JSON error responses, including malformed-JSON handling) from its first commit.
 - Every Kafka consumer integration test waits ~5000ms after `consumer.run()` for the consumer group to finish joining before publishing — a real timing issue found the hard way in the webhook-ingestion-replay-dlq project.
 - Every consumer's dedupe check is written to the dedupe table/column *after* the business write succeeds, never before — a crash between the two must be safe to retry.
-- Postgres is one shared instance (database `settlement_ledger`), three schemas (`authorization`, `ledger`, `payout`) created by a root `db/init/01-schemas.sql` mounted into the Postgres container's `/docker-entrypoint-initdb.d/`. Each service's own `pg.Pool` is constructed with `options: '-c search_path=<its own schema>'` so every bare table name in its queries resolves inside that schema. Each service's own `db/migrate.ts` additionally runs `CREATE SCHEMA IF NOT EXISTS <schema>` defensively, so `npm run migrate` works even against a bare Postgres with no init script.
+- Postgres is one shared instance (database `settlement_ledger`), three schemas (`authz`, `ledger`, `payout`) created by a root `db/init/01-schemas.sql` mounted into the Postgres container's `/docker-entrypoint-initdb.d/`. Each service's own `pg.Pool` is constructed with `options: '-c search_path=<its own schema>'` so every bare table name in its queries resolves inside that schema. Each service's own `db/migrate.ts` additionally runs `CREATE SCHEMA IF NOT EXISTS <schema>` defensively, so `npm run migrate` works even against a bare Postgres with no init script. The `authorization` service's Postgres schema is named `authz`, not `authorization` — `AUTHORIZATION` is a reserved SQL keyword (used in `CREATE SCHEMA ... AUTHORIZATION owner`), so `CREATE SCHEMA IF NOT EXISTS authorization;` is a syntax error. This was discovered when Task 1's init script was first run against real Postgres; `authz` is used everywhere a Postgres schema name is needed, while the service's directory, package name, ports, and code identifiers remain `authorization` throughout.
 - Kafka is a single KRaft-mode broker (no ZooKeeper), dual `PLAINTEXT` (internal, port 29092)/`PLAINTEXT_HOST` (external, port 9092) listeners — reusing the exact working `docker-compose` config from webhook-ingestion-replay-dlq.
 - The idempotency key is a client-supplied `transferId` field in the request body (never a header), reused verbatim as the primary/dedupe key in every table and the `key` of every Kafka message it appears in.
 - Ports: `authorization` = 3001, `ledger` = 3002, `payout` = 3003, `mock-payout-psp` = 4003.
@@ -37,13 +37,13 @@
 - Create: `.gitignore` additions (if needed — check the existing file first)
 
 **Interfaces:**
-- Produces: a running Postgres reachable at `localhost:5432` (user/password `postgres`, database `settlement_ledger`) with empty schemas `authorization`, `ledger`, `payout` already created; a running Kafka reachable at `localhost:9092` externally / `kafka:29092` from other containers.
+- Produces: a running Postgres reachable at `localhost:5432` (user/password `postgres`, database `settlement_ledger`) with empty schemas `authz`, `ledger`, `payout` already created; a running Kafka reachable at `localhost:9092` externally / `kafka:29092` from other containers.
 
 - [ ] **Step 1: Write the schema init script**
 
 ```sql
 -- db/init/01-schemas.sql
-CREATE SCHEMA IF NOT EXISTS authorization;
+CREATE SCHEMA IF NOT EXISTS authz;
 CREATE SCHEMA IF NOT EXISTS ledger;
 CREATE SCHEMA IF NOT EXISTS payout;
 ```
@@ -90,7 +90,7 @@ Run: `docker compose up -d postgres kafka`
 Expected: both containers start; `docker compose ps` shows `postgres` as `healthy`.
 
 Run: `docker exec -it $(docker compose ps -q postgres) psql -U postgres -d settlement_ledger -c '\dn'`
-Expected: lists schemas `authorization`, `ledger`, `payout` (plus `public`).
+Expected: lists schemas `authz`, `ledger`, `payout` (plus `public`).
 
 - [ ] **Step 4: Commit**
 
@@ -523,7 +523,7 @@ git push -u origin task-3-authorization-domain
 - Create: `services/authorization/db/migrations/006_seed_demo_accounts.sql`
 
 **Interfaces:**
-- Produces: tables `transfers`, `reservations`, `balance_projection`, `outbox`, `dlq_events` inside the `authorization` Postgres schema; seeded rows in `balance_projection` for `acc_demo_1` (10000), `acc_demo_2` (5000), `acc_psp_fail_demo` (5000).
+- Produces: tables `transfers`, `reservations`, `balance_projection`, `outbox`, `dlq_events` inside the `authz` Postgres schema; seeded rows in `balance_projection` for `acc_demo_1` (10000), `acc_demo_2` (5000), `acc_psp_fail_demo` (5000).
 
 - [ ] **Step 1: Write the migration runner**
 
@@ -533,7 +533,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
 
-const SCHEMA = 'authorization';
+const SCHEMA = 'authz';
 
 async function migrate(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/settlement_ledger';
@@ -927,7 +927,7 @@ git push -u origin task-5-authorization-application
 
 **Interfaces:**
 - Consumes: `TransferRepositoryPort`, `BalanceProjectionPort` from Task 5.
-- Produces: `PostgresTransferRepository`, `PostgresBalanceProjection`, both constructed with `(pool: Pool)` where `pool` already has `search_path=authorization` set.
+- Produces: `PostgresTransferRepository`, `PostgresBalanceProjection`, both constructed with `(pool: Pool)` where `pool` already has `search_path=authz` set.
 
 - [ ] **Step 1: Write the failing adapter tests**
 
@@ -943,7 +943,7 @@ let pool: Pool;
 let repository: PostgresTransferRepository;
 
 beforeAll(() => {
-  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authorization' });
+  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authz' });
   repository = new PostgresTransferRepository(pool);
 });
 
@@ -1003,7 +1003,7 @@ let pool: Pool;
 let balanceProjection: PostgresBalanceProjection;
 
 beforeAll(() => {
-  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authorization' });
+  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authz' });
   balanceProjection = new PostgresBalanceProjection(pool);
 });
 
@@ -1429,7 +1429,7 @@ let kafka: Kafka;
 let poller: OutboxPoller;
 
 beforeAll(async () => {
-  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authorization' });
+  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authz' });
   kafka = createKafka(KAFKA_BROKERS, 'authorization-test');
   const admin = kafka.admin();
   await admin.connect();
@@ -1554,7 +1554,7 @@ import { OutboxPoller } from './application/services/OutboxPoller';
 
 async function main(): Promise<void> {
   const env = loadEnv();
-  const pool = new Pool({ connectionString: env.databaseUrl, options: '-c search_path=authorization' });
+  const pool = new Pool({ connectionString: env.databaseUrl, options: '-c search_path=authz' });
 
   const kafka = createKafka(env.kafkaBrokers, 'authorization');
   const producer = kafka.producer();
@@ -3102,7 +3102,7 @@ let pool: Pool;
 let repository: PostgresSettlementRepository;
 
 beforeAll(() => {
-  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authorization' });
+  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authz' });
   repository = new PostgresSettlementRepository(pool);
 });
 
@@ -3415,7 +3415,7 @@ async function waitFor<T>(check: () => Promise<T | null>, timeoutMs = 10000): Pr
 }
 
 beforeAll(async () => {
-  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authorization' });
+  pool = new Pool({ connectionString: DATABASE_URL, options: '-c search_path=authz' });
   await pool.query('TRUNCATE transfers, reservations, balance_projection, outbox, dlq_events CASCADE');
   await pool.query("INSERT INTO transfers (id, from_account, to_account, amount, status) VALUES ('st1', 'acc_1', 'acc_2', 300, 'approved')");
   await pool.query("INSERT INTO reservations (transfer_id, account_id, amount, status) VALUES ('st1', 'acc_1', 300, 'pending')");
@@ -3497,7 +3497,7 @@ import { startSettlementPostedConsumer } from './adapters/inbound/kafka/settleme
 
 async function main(): Promise<void> {
   const env = loadEnv();
-  const pool = new Pool({ connectionString: env.databaseUrl, options: '-c search_path=authorization' });
+  const pool = new Pool({ connectionString: env.databaseUrl, options: '-c search_path=authz' });
 
   const kafka = createKafka(env.kafkaBrokers, 'authorization');
   const producer = kafka.producer();
