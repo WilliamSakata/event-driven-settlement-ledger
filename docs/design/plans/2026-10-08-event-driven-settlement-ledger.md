@@ -523,7 +523,7 @@ git push -u origin task-3-authorization-domain
 - Create: `services/authorization/db/migrations/006_seed_demo_accounts.sql`
 
 **Interfaces:**
-- Produces: tables `transfers`, `reservations`, `balance_projection`, `outbox`, `dlq_events` inside the `authz` Postgres schema; seeded rows in `balance_projection` for `acc_demo_1` (10000), `acc_demo_2` (5000), `acc_psp_fail_demo` (5000).
+- Produces: tables `transfers`, `reservations`, `balance_projection`, `outbox`, `dlq_events` inside the `authz` Postgres schema; seeded rows in `balance_projection` for `acc_demo_1` (100000), `acc_demo_2` (5000), `acc_psp_fail_demo` (5000).
 
 - [ ] **Step 1: Write the migration runner**
 
