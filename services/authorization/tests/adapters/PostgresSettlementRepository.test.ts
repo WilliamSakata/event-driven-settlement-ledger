@@ -45,4 +45,23 @@ describe('PostgresSettlementRepository', () => {
     const toBalance = await pool.query("SELECT confirmed_balance FROM balance_projection WHERE account_id = 'acc_2'");
     expect(Number(toBalance.rows[0].confirmed_balance)).toBe(500);
   });
+
+  it('is a no-op when confirmSettlement is called again for an already-confirmed transfer', async () => {
+    const event = { transferId: 't1', fromAccount: 'acc_1', toAccount: 'acc_2', amount: 500 };
+
+    await repository.confirmSettlement(event);
+    await repository.confirmSettlement(event);
+
+    const transfer = await pool.query("SELECT status FROM transfers WHERE id = 't1'");
+    expect(transfer.rows[0].status).toBe('confirmed');
+
+    const reservation = await pool.query("SELECT status FROM reservations WHERE transfer_id = 't1'");
+    expect(reservation.rows[0].status).toBe('released');
+
+    const fromBalance = await pool.query("SELECT confirmed_balance FROM balance_projection WHERE account_id = 'acc_1'");
+    expect(Number(fromBalance.rows[0].confirmed_balance)).toBe(500);
+
+    const toBalance = await pool.query("SELECT confirmed_balance FROM balance_projection WHERE account_id = 'acc_2'");
+    expect(Number(toBalance.rows[0].confirmed_balance)).toBe(500);
+  });
 });

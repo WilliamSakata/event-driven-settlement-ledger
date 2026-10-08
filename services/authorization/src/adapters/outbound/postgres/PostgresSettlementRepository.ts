@@ -13,7 +13,14 @@ export class PostgresSettlementRepository implements SettlementRepositoryPort {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("UPDATE transfers SET status = 'confirmed' WHERE id = $1 AND status = 'approved'", [event.transferId]);
+      const result = await client.query(
+        "UPDATE transfers SET status = 'confirmed' WHERE id = $1 AND status = 'approved'",
+        [event.transferId],
+      );
+      if (result.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return;
+      }
       await client.query("UPDATE reservations SET status = 'released' WHERE transfer_id = $1 AND status = 'pending'", [event.transferId]);
       await client.query(
         `INSERT INTO balance_projection (account_id, confirmed_balance) VALUES ($1, $2)
