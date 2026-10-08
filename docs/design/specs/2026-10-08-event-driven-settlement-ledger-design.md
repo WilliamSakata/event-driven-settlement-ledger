@@ -56,6 +56,8 @@ Each service owns its own Postgres schema (`authorization`, `ledger`, `payout`, 
 - `payout_attempts` — `transfer_id` (primary key, dedupe), `status` (`sent` | `failed`), `psp_reference` (nullable), `created_at`.
 - `outbox` — same shape as above.
 
+**Every service's own `dlq_events` table** (same shape in all three schemas): `id` (uuid), `transfer_id`, `topic`, `payload` (jsonb), `failure_reason`, `attempts`, `created_at`, `reprocessed_at` (nullable). This is where a consumer's *technical* failures land after exhausting retries (see "Event Flow and Idempotency") — distinct from `payout_attempts.status = failed`, which is a successfully-processed *business* outcome (the PSP call itself failed), not a processing error.
+
 **Seed data:** a migration-time seed script inserts a handful of demo accounts into `authorization.balance_projection` with starting `confirmed_balance` values (e.g. `acc_demo_1`, `acc_demo_2`, each funded), so the README's demo walkthrough has accounts to transfer between without needing an account-creation endpoint.
 
 The **same `transfer_id`** — the idempotency key the client supplies on `POST /transfers` — flows through all three services and is the dedupe key at every boundary. No service mints its own derived key.
@@ -142,18 +144,23 @@ A `helm/` directory with a basic chart: one `Deployment` + one `Service` per ser
 
 The idempotency key is a client-supplied `transferId` field in the request body — not an HTTP header — so the same field name is used consistently across the HTTP boundary, the database primary keys, and every Kafka payload described in section 3.
 
+Every service additionally exposes the same generic pair for its own **technical** DLQ (the webhook project's `/dlq` pattern, repeated per service): `GET /dlq` (list entries) and `POST /dlq/:id/reprocess` (replay that entry's stored payload through the same consumer logic). This is separate from `payout`'s business-outcome endpoints below.
+
 **`authorization`:**
 - `POST /transfers` — body `{ transferId, fromAccount, toAccount, amount }` → `201 { transferId, status }`. Replaying the same `transferId` returns the previously decided result instead of re-evaluating.
 - `GET /transfers/:transferId` → `{ transferId, status, fromAccount, toAccount, amount }`
+- `GET /dlq`, `POST /dlq/:id/reprocess` — technical failures from consuming `settlement-posted`.
 - `GET /health`
 
 **`ledger`:**
 - `GET /accounts/:accountId/entries` → the append-only list of ledger entries for that account, in order — the direct demonstration of this project's "full traceability of every movement" goal.
+- `GET /dlq`, `POST /dlq/:id/reprocess` — technical failures from consuming `transfer-authorized`.
 - `GET /health`
 
 **`payout`:**
-- `GET /payout/failed` → list of failed payout attempts (this service's equivalent of the webhook project's `/dlq` browsing endpoint).
+- `GET /payout/failed` → list of failed payout attempts, i.e. business outcomes where the PSP call itself failed (not a processing error).
 - `POST /payout/:transferId/retry` → re-attempts the PSP call for that `transferId`.
+- `GET /dlq`, `POST /dlq/:id/reprocess` — technical failures from consuming `settlement-posted`, separate from the business-outcome endpoints above.
 - `GET /health`
 
 ## Stack
