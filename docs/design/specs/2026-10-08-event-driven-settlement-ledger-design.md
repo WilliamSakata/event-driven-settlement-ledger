@@ -37,11 +37,11 @@ Client → POST /transfers → [authorization]
                                         (terminal — no consumer in this project)
 ```
 
-Each service owns its own Postgres schema (`authorization`, `ledger`, `payout`, one shared Postgres instance — see "Project Structure" for why one instance is acceptable here) and never queries another service's schema directly. Cross-service communication is exclusively asynchronous, through Kafka topics.
+Each service owns its own Postgres schema (`authz`, `ledger`, `payout`, one shared Postgres instance — see "Project Structure" for why one instance is acceptable here) and never queries another service's schema directly. Cross-service communication is exclusively asynchronous, through Kafka topics. The `authorization` service's Postgres schema is named `authz`, not `authorization` — `AUTHORIZATION` is a reserved SQL keyword (used in `CREATE SCHEMA ... AUTHORIZATION owner`), making the bare identifier `authorization` a syntax error as a schema name. Only the Postgres schema is renamed; the service itself, its code, and its ports keep the name `authorization` throughout.
 
 ## 2. Data Model
 
-**`authorization` schema:**
+**`authz` schema** (the `authorization` service's schema):
 - `transfers` — `id` (the client-supplied idempotency key), `from_account`, `to_account`, `amount`, `status` (`approved` | `rejected` | `confirmed` | `released`), `created_at`. `id` is the primary key, which is what makes `POST /transfers` idempotent: a retried request with the same key returns the already-decided result instead of re-evaluating.
 - `reservations` — `transfer_id`, `account_id`, `amount`, `status` (`pending` | `released`). Exists to close the staleness window between "approved" and "the ledger confirmed": `available_balance = confirmed_balance − sum(reservations where status = pending for that account)`. Without this, two concurrent transfers could both be approved against the same not-yet-confirmed balance (double-spend).
 - `balance_projection` — `account_id`, `confirmed_balance`. Updated **only** when consuming `settlement-posted` — never optimistically updated at approval time.
@@ -58,7 +58,7 @@ Each service owns its own Postgres schema (`authorization`, `ledger`, `payout`, 
 
 **Every service's own `dlq_events` table** (same shape in all three schemas): `id` (uuid), `transfer_id`, `topic`, `payload` (jsonb), `failure_reason`, `attempts`, `created_at`, `reprocessed_at` (nullable). This is where a consumer's *technical* failures land after exhausting retries (see "Event Flow and Idempotency") — distinct from `payout_attempts.status = failed`, which is a successfully-processed *business* outcome (the PSP call itself failed), not a processing error.
 
-**Seed data:** a migration-time seed script inserts a handful of demo accounts into `authorization.balance_projection` with starting `confirmed_balance` values (e.g. `acc_demo_1`, `acc_demo_2`, each funded), so the README's demo walkthrough has accounts to transfer between without needing an account-creation endpoint.
+**Seed data:** a migration-time seed script inserts a handful of demo accounts into `authz.balance_projection` with starting `confirmed_balance` values (e.g. `acc_demo_1`, `acc_demo_2`, each funded), so the README's demo walkthrough has accounts to transfer between without needing an account-creation endpoint.
 
 The **same `transfer_id`** — the idempotency key the client supplies on `POST /transfers` — flows through all three services and is the dedupe key at every boundary. No service mints its own derived key.
 
