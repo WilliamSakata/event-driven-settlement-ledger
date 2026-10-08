@@ -1132,7 +1132,7 @@ export class PostgresBalanceProjection implements BalanceProjectionPort {
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `npx vitest run tests/adapters`
-Expected: PASS (5 tests)
+Expected: PASS (6 tests)
 
 - [ ] **Step 5: Commit and push**
 
