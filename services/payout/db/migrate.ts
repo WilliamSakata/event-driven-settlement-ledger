@@ -28,7 +28,20 @@ async function migrate(): Promise<void> {
     }
 
     const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
-    await pool.query(sql);
+    try {
+      await pool.query(sql);
+    } catch (error) {
+      // CREATE EXTENSION IF NOT EXISTS pgcrypto races when docker-compose starts
+      // every service's migrate job concurrently against the same database --
+      // the IF NOT EXISTS check isn't atomic across sessions. If another
+      // service's migration already created it, treat this as success.
+      const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined;
+      const message = error instanceof Error ? error.message : String(error);
+      const isConcurrentPgcryptoRace = (code === '23505' || code === '42710') && message.includes('pg_extension');
+      if (!isConcurrentPgcryptoRace) {
+        throw error;
+      }
+    }
     await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
     console.log(`applied migration ${file}`);
   }
