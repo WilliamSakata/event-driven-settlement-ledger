@@ -1,0 +1,24 @@
+{
+  "name": "mock-payout-psp",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.5.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^5.0.0"
+  }
+}
