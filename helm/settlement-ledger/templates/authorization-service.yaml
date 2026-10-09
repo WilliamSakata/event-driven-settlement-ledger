@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: authorization
+spec:
+  selector:
+    app: authorization
+  ports:
+    - port: {{ .Values.services.authorization.port }}
+      targetPort: {{ .Values.services.authorization.port }}
