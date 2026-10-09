@@ -9,6 +9,8 @@ import { SendPayout } from './application/use-cases/SendPayout';
 import { RetryPayout } from './application/use-cases/RetryPayout';
 import { ReprocessDlqEvent } from './application/use-cases/ReprocessDlqEvent';
 import { startSettlementPostedConsumer } from './adapters/inbound/kafka/settlementPostedConsumer';
+import { PostgresOutboxRepository } from './adapters/outbound/postgres/PostgresOutboxRepository';
+import { OutboxPoller } from './application/services/OutboxPoller';
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -18,6 +20,10 @@ async function main(): Promise<void> {
   const producer = kafka.producer();
   await producer.connect();
   const producerAdapter = new KafkaProducerAdapter(producer);
+
+  const outboxRepository = new PostgresOutboxRepository(pool);
+  const outboxPoller = new OutboxPoller(outboxRepository, producerAdapter);
+  outboxPoller.start();
 
   const payoutRepository = new PostgresPayoutRepository(pool);
   const dlqRepository = new PostgresDlqRepository(pool);
