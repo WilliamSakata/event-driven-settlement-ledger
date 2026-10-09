@@ -1,0 +1,14 @@
+{
+  "name": "tests-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "typescript": "^5.5.4",
+    "vitest": "^5.0.0"
+  }
+}
