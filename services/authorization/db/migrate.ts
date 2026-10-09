@@ -9,6 +9,25 @@ async function migrate(): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl, options: `-c search_path=${SCHEMA}` });
 
   await pool.query(`CREATE SCHEMA IF NOT EXISTS ${SCHEMA}`);
+
+  try {
+    await pool.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+  } catch (error) {
+    // Races when docker-compose starts every service's migrate job concurrently
+    // against the same database -- the IF NOT EXISTS check isn't atomic across
+    // sessions. If another service's migrate job already created it, treat this
+    // as success. Isolated here, as its own statement, so a race on it can never
+    // abort a migration file's own DDL (Postgres's simple-query protocol runs a
+    // multi-statement string as one implicit transaction -- an error partway
+    // through aborts every statement after it in that string).
+    const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined;
+    const message = error instanceof Error ? error.message : String(error);
+    const isConcurrentPgcryptoRace = (code === '23505' || code === '42710') && message.includes('pg_extension');
+    if (!isConcurrentPgcryptoRace) {
+      throw error;
+    }
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       filename TEXT PRIMARY KEY,
@@ -28,20 +47,7 @@ async function migrate(): Promise<void> {
     }
 
     const sql = readFileSync(path.join(migrationsDir, file), 'utf-8');
-    try {
-      await pool.query(sql);
-    } catch (error) {
-      // CREATE EXTENSION IF NOT EXISTS pgcrypto races when docker-compose starts
-      // every service's migrate job concurrently against the same database --
-      // the IF NOT EXISTS check isn't atomic across sessions. If another
-      // service's migration already created it, treat this as success.
-      const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined;
-      const message = error instanceof Error ? error.message : String(error);
-      const isConcurrentPgcryptoRace = (code === '23505' || code === '42710') && message.includes('pg_extension');
-      if (!isConcurrentPgcryptoRace) {
-        throw error;
-      }
-    }
+    await pool.query(sql);
     await pool.query('INSERT INTO schema_migrations (filename) VALUES ($1)', [file]);
     console.log(`applied migration ${file}`);
   }
