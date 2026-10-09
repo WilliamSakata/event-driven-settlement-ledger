@@ -1,0 +1,11 @@
+image:
+  repository: settlement-ledger
+  tag: latest
+
+services:
+  authorization:
+    port: 3001
+  ledger:
+    port: 3002
+  payout:
+    port: 3003

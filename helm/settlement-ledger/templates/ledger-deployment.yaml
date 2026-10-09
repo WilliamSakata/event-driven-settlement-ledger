@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger
+  template:
+    metadata:
+      labels:
+        app: ledger
+    spec:
+      containers:
+        - name: ledger
+          image: "{{ .Values.image.repository }}-ledger:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.services.ledger.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.services.ledger.port }}"

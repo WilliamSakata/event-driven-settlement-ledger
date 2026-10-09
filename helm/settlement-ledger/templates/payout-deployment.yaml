@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payout
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: payout
+  template:
+    metadata:
+      labels:
+        app: payout
+    spec:
+      containers:
+        - name: payout
+          image: "{{ .Values.image.repository }}-payout:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.services.payout.port }}
+          env:
+            - name: PORT
+              value: "{{ .Values.services.payout.port }}"

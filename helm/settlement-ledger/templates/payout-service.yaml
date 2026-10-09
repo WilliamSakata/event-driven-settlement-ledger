@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: payout
+spec:
+  selector:
+    app: payout
+  ports:
+    - port: {{ .Values.services.payout.port }}
+      targetPort: {{ .Values.services.payout.port }}

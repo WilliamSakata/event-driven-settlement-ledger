@@ -1,0 +1,4 @@
+apiVersion: v2
+name: settlement-ledger
+description: Deployment intent for the event-driven settlement ledger (documents intent only — not applied against a real cluster)
+version: 0.1.0
