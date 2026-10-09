@@ -1,11 +1,16 @@
 import express, { Express, Request, Response, NextFunction } from 'express';
 import { RequestTransfer } from '../../../application/use-cases/RequestTransfer';
 import { TransferRepositoryPort } from '../../../application/ports/TransferRepositoryPort';
+import { DlqRepositoryPort } from '../../../application/ports/DlqRepositoryPort';
+import { ReprocessDlqEvent } from '../../../application/use-cases/ReprocessDlqEvent';
 import { createTransfersRouter } from './transfersRouter';
+import { createDlqRouter } from './dlqRouter';
 
 export interface AppDependencies {
   requestTransfer?: RequestTransfer;
   transferRepository?: TransferRepositoryPort;
+  dlqRepository?: DlqRepositoryPort;
+  reprocessDlqEvent?: ReprocessDlqEvent;
 }
 
 export function createApp(deps: AppDependencies): Express {
@@ -18,6 +23,9 @@ export function createApp(deps: AppDependencies): Express {
 
   if (deps.requestTransfer && deps.transferRepository) {
     app.use(createTransfersRouter(deps.requestTransfer, deps.transferRepository));
+  }
+  if (deps.dlqRepository && deps.reprocessDlqEvent) {
+    app.use(createDlqRouter(deps.dlqRepository, deps.reprocessDlqEvent));
   }
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
